@@ -25,7 +25,7 @@ body{margin:0;background:#9fd0ee;color:#f2f4ef;font-family:system-ui,sans-serif;
 #pedals button:active{filter:brightness(1.4)}
 </style></head><body>
 <canvas id="view"></canvas>
-<div id="hud"><div id="speed"><span id="kmh">0</span><small>km/j</small></div><div class="btns"><button id="cam" type="button">Kamera: ATAS</button><button id="mute" type="button">Suara: HIDUP</button></div></div>
+<div id="hud"><div id="speed"><span id="kmh">0</span><small>km/j</small></div><div class="btns"><button id="cam" type="button">Kamera: ATAS</button><button id="mute" type="button">Suara: KETUK</button></div></div>
 <div id="help">Panah/WASD: gas, rem, belok · Spasi: rem · C: ganti kamera</div>
 <div id="dash"></div>
 <div id="pad">
@@ -278,7 +278,18 @@ function initAudio() {
     ns.connect(bp); bp.connect(noiseGain); noiseGain.connect(master); ns.start();
   } catch (e) { AC = null; }
 }
-['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, initAudio));
+function unlockAudio() {
+  initAudio();
+  if (AC && AC.state !== 'running') AC.resume().then(() => { if (AC.state === 'running') ping(); }).catch(() => {});
+}
+function ping() { // bunyi pendek tanda suara aktif
+  if (!AC || muted) return;
+  const o = AC.createOscillator(), g = AC.createGain(); o.frequency.value = 660;
+  g.gain.setValueAtTime(0.15, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.15);
+  o.connect(g); g.connect(AC.master); o.start(); o.stop(AC.currentTime + 0.16);
+}
+// browser baru mengizinkan suara setelah sentuhan selesai / klik / tombol: pasang semuanya
+['pointerdown', 'pointerup', 'touchend', 'mousedown', 'click', 'keydown'].forEach(ev => addEventListener(ev, unlockAudio, true));
 function thump() {
   if (!AC || muted) return;
   const src = AC.createBufferSource(); src.buffer = thumpBuf;
@@ -296,7 +307,9 @@ function audioUpdate(throttle, braking, speed) {
   noiseGain.gain.setTargetAtTime(muted ? 0 : (braking && sp > 4 ? Math.min(0.16, 0.03 + sp * 0.007) : 0), t, 0.04);
 }
 const muteBtn = document.getElementById('mute');
-muteBtn.addEventListener('click', () => { muted = !muted; muteBtn.textContent = 'Suara: ' + (muted ? 'MATI' : 'HIDUP'); });
+function muteLabel() { muteBtn.textContent = 'Suara: ' + (muted ? 'MATI' : (AC && AC.state === 'running' ? 'HIDUP' : 'KETUK')); }
+muteBtn.addEventListener('click', () => { if (AC && AC.state === 'running') muted = !muted; muteLabel(); if (!muted) ping(); });
+setInterval(muteLabel, 500);
 
 // ---- loop ----
 const kmh = document.getElementById('kmh');
