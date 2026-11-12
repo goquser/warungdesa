@@ -1,45 +1,176 @@
 <!DOCTYPE html>
 <html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Mobil Kotak</title>
 <style>html,body{height:100%}
-body{margin:0;background:#232a24;color:#f2f4ef;font-family:system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
- padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box}
-#wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;min-height:0}
-#stage{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
-canvas{background:#5a9e4b;aspect-ratio:8/5;width:100%;max-width:100%;max-height:100%;object-fit:contain;border:4px solid #10140f;box-sizing:border-box}
-#info{font-size:13px;color:#aab4a8;text-align:center}
-#pad{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;max-width:560px}
-#wheel{width:120px;height:120px;border-radius:50%;border:14px solid #3a443b;box-sizing:border-box;position:relative;touch-action:none;flex:none;cursor:grab;background:#232a24}
-#wheel::before{content:"";position:absolute;left:50%;top:50%;width:18px;height:18px;border-radius:50%;background:#6b7a6c;transform:translate(-50%,-50%)}
-#wheel::after{content:"";position:absolute;left:0;right:0;top:50%;height:10px;margin-top:-5px;background:#3a443b}
-#wheel i{position:absolute;left:50%;top:-14px;width:10px;height:22px;margin-left:-5px;background:#d93a3a;border-radius:3px;z-index:1}
-#pedals{display:flex;gap:12px;align-items:flex-end}
+body{margin:0;background:#9fd0ee;color:#f2f4ef;font-family:system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+#view{position:fixed;inset:0;width:100%;height:100%;display:block}
+#hud{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+ padding-top:max(10px,env(safe-area-inset-top,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+#speed{background:rgba(16,20,15,.72);padding:8px 12px;border-radius:10px;font-weight:700;font-size:20px;font-variant-numeric:tabular-nums;min-width:96px}
+#speed small{font-size:12px;font-weight:500;opacity:.8;margin-left:4px}
+#cam{pointer-events:auto;border:0;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:700;background:rgba(16,20,15,.72);color:#f2f4ef;touch-action:manipulation}
+#cam:focus-visible{outline:2px solid #fff}
+#help{position:fixed;left:0;right:0;top:60px;text-align:center;font-size:12px;color:#10140f;opacity:.75;padding:0 16px;pointer-events:none}
+#dash{position:fixed;left:0;right:0;bottom:0;height:26vh;min-height:150px;background:linear-gradient(#0000,#101214 40%);display:none;pointer-events:none}
+.inside #dash{display:block}
+#pad{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:flex-end;justify-content:space-between;gap:12px;
+ padding-bottom:max(10px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
+#wheel{pointer-events:auto;width:min(40vw,170px);aspect-ratio:1;border-radius:50%;touch-action:none;cursor:grab;flex:none;filter:drop-shadow(0 4px 6px rgba(0,0,0,.45))}
+.inside #wheel{width:min(48vw,230px);margin-bottom:-6%}
+#wheel svg{width:100%;height:100%;display:block}
+#pedals{pointer-events:auto;display:flex;gap:12px;align-items:flex-end}
 #pedals button{border:0;border-radius:12px;color:#f2f4ef;font-weight:700;font-size:15px;touch-action:none;user-select:none}
 #pedals [data-k=down]{width:64px;height:84px;background:#9b3a3a}
 #pedals [data-k=up]{width:80px;height:110px;background:#3d8a4a}
 #pedals button:active{filter:brightness(1.4)}
 </style></head><body>
-<div id="wrap">
-<div id="stage"><canvas id="c" width="800" height="500"></canvas></div>
-<div id="info">Panah / WASD: gas, rem, belok kiri-kanan. Spasi: rem tangan. Di layar: putar setir, tekan GAS / REM.</div>
+<canvas id="view"></canvas>
+<div id="hud"><div id="speed"><span id="kmh">0</span><small>km/j</small></div><button id="cam" type="button">Kamera: ATAS</button></div>
+<div id="help">Panah/WASD: gas, rem, belok · Spasi: rem · C: ganti kamera</div>
+<div id="dash"></div>
 <div id="pad">
-<div id="wheel" aria-label="Setir"><i></i></div>
+<div id="wheel" aria-label="Setir"><svg viewBox="-100 -100 200 200">
+<circle r="84" fill="none" stroke="#15171a" stroke-width="24"/>
+<circle r="84" fill="none" stroke="#2c3036" stroke-width="20" stroke-dasharray="1.2 2.6"/>
+<circle r="95.5" fill="none" stroke="#4d545c" stroke-width="1.6"/>
+<circle r="72.5" fill="none" stroke="#050607" stroke-width="1.6"/>
+<g stroke="#1b1e22" stroke-width="15" stroke-linecap="round"><line x1="-76" y1="6" x2="-16" y2="10"/><line x1="76" y1="6" x2="16" y2="10"/><line x1="0" y1="22" x2="0" y2="74"/></g>
+<g stroke="#3b4148" stroke-width="2" stroke-linecap="round" fill="none"><line x1="-76" y1="0" x2="-16" y2="4"/><line x1="76" y1="0" x2="16" y2="4"/></g>
+<circle r="29" fill="#22262b" stroke="#434a52" stroke-width="2"/>
+<circle r="20" fill="#181b1f"/>
+<rect x="-8" y="-8" width="16" height="16" rx="3" fill="#d93a3a"/>
+<rect x="-4" y="-97" width="8" height="17" rx="2" fill="#e0443a"/>
+</svg></div>
 <div id="pedals"><button data-k="down" aria-label="Rem">REM</button><button data-k="up" aria-label="Gas">GAS</button></div>
 </div>
-</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
-const W = cv.width, H = cv.height;
+// ===== Mobil Kotak 3D =====
+const canvas = document.getElementById('view');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fd0ee);
+scene.fog = new THREE.Fog(0x9fd0ee, 90, 260);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 500);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x4a7a3a, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(40, 80, 30); scene.add(sun);
+
+const mat = c => new THREE.MeshLambertMaterial({ color: c });
+const box = (w, h, d, c) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(c));
+
+// ---- lintasan: persegi bundar (pusat jalan), setengah lebar 7 ----
+const A = 60, B = 35, R = 25, HALF = 7;
+function sdf(x, z) { // jarak bertanda ke garis tengah jalan (negatif = di dalam oval)
+  const qx = Math.abs(x) - (A - R), qz = Math.abs(z) - (B - R);
+  return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - R;
+}
+const onRoad = (x, z) => Math.abs(sdf(x, z)) < HALF;
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), mat(0x5a9e4b));
+ground.rotation.x = -Math.PI / 2; scene.add(ground);
+
+function ringShape() {
+  const outer = new THREE.Shape();
+  roundRect(outer, A + HALF, B + HALF, R + HALF);
+  const hole = new THREE.Path();
+  roundRect(hole, A - HALF, B - HALF, R - HALF);
+  outer.holes.push(hole);
+  return outer;
+}
+function roundRect(p, a, b, k) {
+  p.moveTo(a, -(b - k)); p.lineTo(a, b - k);
+  p.absarc(a - k, b - k, k, 0, Math.PI / 2, false);
+  p.lineTo(-(a - k), b);
+  p.absarc(-(a - k), b - k, k, Math.PI / 2, Math.PI, false);
+  p.lineTo(-a, -(b - k));
+  p.absarc(-(a - k), -(b - k), k, Math.PI, Math.PI * 1.5, false);
+  p.lineTo(a - k, -b);
+  p.absarc(a - k, -(b - k), k, Math.PI * 1.5, Math.PI * 2, false);
+}
+const asphalt = new THREE.Mesh(new THREE.ShapeGeometry(ringShape(), 24), mat(0x3d4044));
+asphalt.rotation.x = -Math.PI / 2; asphalt.position.y = 0.02; scene.add(asphalt);
+
+// marka putus-putus: ambil sampel titik di garis tengah lewat pencarian sudut sederhana
+(function dashes() {
+  const a = A - R, b = B - R;
+  const pts = [];
+  const step = 3.2;
+  const add = (x, z, rot) => pts.push([x, z, rot]);
+  for (let x = -a; x < a; x += step * 2) add(x + step / 2, -B, 0);
+  for (let t = 0; t < Math.PI / 2; t += step * 2 / R) add(a + Math.sin(t) * R, -b - Math.cos(t) * R, -(t));
+  for (let z = -b; z < b; z += step * 2) add(A, z + step / 2, Math.PI / 2);
+  for (let t = 0; t < Math.PI / 2; t += step * 2 / R) add(a + Math.cos(t) * R, b + Math.sin(t) * R, Math.PI / 2 - t);
+  for (let x = a; x > -a; x -= step * 2) add(x - step / 2, B, 0);
+  for (let t = 0; t < Math.PI / 2; t += step * 2 / R) add(-a - Math.sin(t) * R, b + Math.cos(t) * R, t);
+  for (let z = b; z > -b; z -= step * 2) add(-A, z - step / 2, Math.PI / 2);
+  for (let t = 0; t < Math.PI / 2; t += step * 2 / R) add(-a - Math.cos(t) * R, -b - Math.sin(t) * R, Math.PI / 2 - t);
+  const g = new THREE.BoxGeometry(step, 0.02, 0.35), m = mat(0xf0f0e6);
+  for (const [x, z, r] of pts) { const d = new THREE.Mesh(g, m); d.position.set(x, 0.05, z); d.rotation.y = r; scene.add(d); }
+})();
+// garis start
+const startLine = box(1.2, 0.03, HALF * 2, 0xffffff); startLine.position.set(0, 0.06, -B); scene.add(startLine);
+
+// ---- pohon dan rumah (dengan collider bulat) ----
+const colliders = [];
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+function tree(x, z) {
+  const g = new THREE.Group();
+  const h = 2 + rnd() * 1.5;
+  const t = box(0.9, h, 0.9, 0x6b4a2b); t.position.y = h / 2; g.add(t);
+  const s1 = 3.4 + rnd(), l1 = box(s1, 2.2, s1, 0x2f7d3a); l1.position.y = h + 0.9; g.add(l1);
+  const s2 = s1 * 0.65, l2 = box(s2, 1.8, s2, 0x3b9447); l2.position.y = h + 2.5; g.add(l2);
+  g.position.set(x, 0, z); g.rotation.y = rnd() * Math.PI; scene.add(g);
+  colliders.push({ x, z, r: 1.6 });
+}
+const houseColors = [0xe8d9b5, 0xd96c5a, 0x7fb0d6, 0xf0c44a, 0xb9d6a0, 0xe0a0c0];
+function house(x, z) {
+  const g = new THREE.Group();
+  const w = 8 + rnd() * 3, d = 7 + rnd() * 2, h = 4.5;
+  const body = box(w, h, d, houseColors[Math.floor(rnd() * houseColors.length)]); body.position.y = h / 2; g.add(body);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 3.2, 4), mat(0x9a3b2e));
+  roof.rotation.y = Math.PI / 4; roof.position.y = h + 1.6; g.add(roof);
+  const door = box(1.4, 2.4, 0.15, 0x5b3a22); door.position.set(0, 1.2, d / 2 + 0.05); g.add(door);
+  for (const sx of [-w / 3, w / 3]) { const win = box(1.4, 1.3, 0.15, 0x9fd8ff); win.position.set(sx, 2.8, d / 2 + 0.05); g.add(win); }
+  g.position.set(x, 0, z); g.rotation.y = Math.round(rnd() * 4) * Math.PI / 2; scene.add(g);
+  colliders.push({ x, z, r: Math.max(w, d) * 0.62 });
+}
+function spot(minSdf, maxSdf, minGap, xr, zr) {
+  for (let i = 0; i < 60; i++) {
+    const x = (rnd() * 2 - 1) * xr, z = (rnd() * 2 - 1) * zr, s = sdf(x, z);
+    if (s < minSdf || s > maxSdf) continue;
+    if (colliders.some(c => Math.hypot(c.x - x, c.z - z) < c.r + minGap)) continue;
+    return [x, z];
+  }
+  return null;
+}
+for (let i = 0; i < 12; i++) { const p = spot(16, 70, 6, 150, 120); if (p) house(p[0], p[1]); }   // di luar lintasan
+for (let i = 0; i < 3; i++) { const p = spot(-60, -16, 6, 50, 28); if (p) house(p[0], p[1]); }    // di tengah lintasan
+for (let i = 0; i < 90; i++) { const p = spot(11, 90, 2.5, 160, 130); if (p) tree(p[0], p[1]); }
+for (let i = 0; i < 14; i++) { const p = spot(-60, -11, 2.5, 50, 28); if (p) tree(p[0], p[1]); }
+
+// ---- mobil ----
+const carMesh = new THREE.Group();
+const body = box(2, 0.55, 4.2, 0xd93a3a); body.position.y = 0.6; carMesh.add(body);
+const cabin = box(1.8, 0.65, 2, 0xb02e2e); cabin.position.set(0, 1.3, -0.3); carMesh.add(cabin);
+const glass = box(1.82, 0.4, 1.6, 0x9fd8ff); glass.position.set(0, 1.35, -0.3); carMesh.add(glass);
+for (const [x, z] of [[-1.05, 1.3], [1.05, 1.3], [-1.05, -1.3], [1.05, -1.3]]) { const w = box(0.3, 0.7, 0.7, 0x151515); w.position.set(x, 0.35, z); carMesh.add(w); }
+for (const x of [-0.7, 0.7]) { const l = box(0.4, 0.2, 0.1, 0xffe14d); l.position.set(x, 0.75, 2.12); carMesh.add(l); }
+scene.add(carMesh);
+
+const car = { x: 0, z: -B, h: Math.PI / 2, v: 0 };
 
 // ---- input ----
 const keys = {};
-const map = { ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right', Space:'brake' };
-addEventListener('keydown', e => { const k = map[e.code]; if (k) { keys[k] = true; e.preventDefault(); } });
+const map = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Space: 'brake' };
+addEventListener('keydown', e => {
+  if (e.code === 'KeyC') { if (!e.repeat) toggleCam(); e.preventDefault(); return; }
+  const k = map[e.code]; if (k) { keys[k] = true; e.preventDefault(); }
+});
 addEventListener('keyup', e => { const k = map[e.code]; if (k) { keys[k] = false; e.preventDefault(); } });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
-// iframe perlu fokus agar keyboard terbaca
 addEventListener('pointerdown', () => window.focus());
 window.focus();
-document.querySelectorAll('#pad button').forEach(b => {
+document.querySelectorAll('#pedals button').forEach(b => {
   const k = b.dataset.k;
   b.addEventListener('pointerdown', e => { keys[k] = true; b.setPointerCapture(e.pointerId); e.preventDefault(); });
   const off = e => { keys[k] = false; e.preventDefault(); };
@@ -47,11 +178,11 @@ document.querySelectorAll('#pad button').forEach(b => {
   b.addEventListener('contextmenu', e => e.preventDefault());
 });
 
-// ---- setir ----
+// setir
 const wheel = document.getElementById('wheel');
 let wheelAngle = 0, wheelDrag = null;
-const MAXW = 100;
-const ang = (e) => { const r = wheel.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height/2), e.clientX - (r.left + r.width/2)) * 180 / Math.PI; };
+const MAXW = 120;
+const ang = e => { const r = wheel.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
 wheel.addEventListener('pointerdown', e => { wheel.setPointerCapture(e.pointerId); wheelDrag = { last: ang(e) }; e.preventDefault(); });
 wheel.addEventListener('pointermove', e => {
   if (!wheelDrag) return;
@@ -60,74 +191,79 @@ wheel.addEventListener('pointermove', e => {
 });
 const wheelUp = () => { wheelDrag = null; };
 wheel.addEventListener('pointerup', wheelUp); wheel.addEventListener('pointercancel', wheelUp);
+wheel.addEventListener('contextmenu', e => e.preventDefault());
 
-// ---- jalan aspal (lintasan oval) ----
-const road = document.createElement('canvas'); road.width = W; road.height = H;
-const rc = road.getContext('2d');
-function trackPath(c) {
-  c.beginPath();
-  c.roundRect(110, 90, W - 220, H - 180, 120);
+// kamera
+let inside = false;
+const camBtn = document.getElementById('cam');
+function toggleCam() {
+  inside = !inside;
+  document.body.classList.toggle('inside', inside);
+  camBtn.textContent = 'Kamera: ' + (inside ? 'DALAM' : 'ATAS');
+  camera.fov = inside ? 72 : 55; camera.updateProjectionMatrix();
+  carMesh.children.forEach(c => { if (c === cabin || c === glass) c.visible = !inside; });
+  snapCam = true;
 }
-rc.lineJoin = 'round';
-trackPath(rc); rc.lineWidth = 96; rc.strokeStyle = '#3d4044'; rc.stroke();
-const roadData = rc.getImageData(0, 0, W, H).data;
-const onRoad = (x, y) => {
-  x = Math.round(x); y = Math.round(y);
-  if (x < 0 || y < 0 || x >= W || y >= H) return false;
-  return roadData[(y * W + x) * 4 + 3] > 0;
-};
+camBtn.addEventListener('click', toggleCam);
+let snapCam = true;
 
-const car = { x: W / 2, y: 90, a: 0, v: 0, w: 22, l: 40 };
-const trail = [];
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
 
-function update() {
-  const road_ = onRoad(car.x, car.y);
-  const maxV = road_ ? 5 : 2.2, maxR = -2, accel = 0.16;
-  if (keys.up) car.v += accel;
-  if (keys.down) car.v -= accel;
-  if (keys.brake) car.v *= 0.9;
-  car.v *= road_ ? 0.99 : 0.96;
+// ---- loop ----
+const kmh = document.getElementById('kmh');
+let last = performance.now();
+function step(dt) {
+  const road = onRoad(car.x, car.z);
+  const maxV = road ? 20 : 7, maxR = -6;
+  if (keys.up) car.v += 11 * dt;
+  if (keys.down) car.v -= (car.v > 0.5 ? 26 : 9) * dt;
+  if (keys.brake) car.v -= Math.sign(car.v) * Math.min(Math.abs(car.v), 30 * dt);
+  car.v -= car.v * (road ? 0.25 : 1.6) * dt;
+  if (!keys.up && !keys.down && Math.abs(car.v) < 0.15) car.v = 0;
   car.v = Math.max(maxR, Math.min(maxV, car.v));
-  if (Math.abs(car.v) < 0.02) car.v = 0;
 
-  if (!wheelDrag) wheelAngle *= 0.85; // setir kembali ke tengah
+  if (!wheelDrag) wheelAngle *= Math.pow(0.0008, dt); // setir balik ke tengah
   const keySteer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  const steer = keySteer || wheelAngle / MAXW;
-  wheel.style.transform = 'rotate(' + (keySteer ? keySteer * 60 : wheelAngle) + 'deg)';
-  // belok bisa dilakukan walau pelan; arah terbalik saat mundur
-  const grip = Math.min(1, 0.35 + Math.abs(car.v) / 2);
-  car.a += steer * 0.055 * grip * (car.v < 0 ? -1 : 1);
+  const steer = keySteer || wheelAngle / MAXW; // -1 kiri .. 1 kanan
+  wheel.style.transform = 'rotate(' + (keySteer ? keySteer * 70 : wheelAngle) + 'deg)';
+  const grip = Math.min(1, 0.3 + Math.abs(car.v) / 5);
+  car.h -= steer * 1.7 * grip * Math.sign(car.v || 1) * dt;
 
-  const nx = car.x + Math.cos(car.a) * car.v;
-  const ny = car.y + Math.sin(car.a) * car.v;
-  const r = 14;
-  if (nx < r || nx > W - r || ny < r || ny > H - r) car.v *= -0.4;
-  else { car.x = nx; car.y = ny; }
-
-  if (Math.abs(car.v) > 2 && (!trail.length || Math.hypot(trail.at(-1)[0] - car.x, trail.at(-1)[1] - car.y) > 6)) {
-    trail.push([car.x, car.y, road_]); if (trail.length > 100) trail.shift();
+  car.x += Math.sin(car.h) * car.v * dt;
+  car.z += Math.cos(car.h) * car.v * dt;
+  car.x = Math.max(-280, Math.min(280, car.x)); car.z = Math.max(-280, Math.min(280, car.z));
+  for (const c of colliders) {
+    const dx = car.x - c.x, dz = car.z - c.z, d = Math.hypot(dx, dz), m = c.r + 1.5;
+    if (d < m && d > 0) { car.x = c.x + dx / d * m; car.z = c.z + dz / d * m; car.v *= 0.5; }
   }
 }
-
-function draw() {
-  ctx.fillStyle = '#5a9e4b'; ctx.fillRect(0, 0, W, H);
-  // aspal + marka
-  ctx.drawImage(road, 0, 0);
-  ctx.save();
-  trackPath(ctx); ctx.lineWidth = 3; ctx.strokeStyle = '#e8e8e0'; ctx.setLineDash([22, 18]); ctx.stroke();
-  ctx.restore();
-  // garis start
-  ctx.fillStyle = '#fff'; ctx.fillRect(W / 2 - 3, 42, 6, 96);
-
-  for (const [x, y, onr] of trail) { ctx.fillStyle = onr ? 'rgba(0,0,0,.25)' : 'rgba(60,40,20,.3)'; ctx.fillRect(x - 3, y - 3, 6, 6); }
-
-  ctx.save();
-  ctx.translate(car.x, car.y); ctx.rotate(car.a);
-  ctx.fillStyle = '#d93a3a'; ctx.fillRect(-car.l / 2, -car.w / 2, car.l, car.w);
-  ctx.fillStyle = '#9fd8ff'; ctx.fillRect(2, -car.w / 2 + 3, 10, car.w - 6);
-  ctx.fillStyle = '#ffe14d'; ctx.fillRect(car.l / 2 - 4, -car.w / 2 + 2, 4, 5); ctx.fillRect(car.l / 2 - 4, car.w / 2 - 7, 4, 5);
-  ctx.restore();
+function render() {
+  carMesh.position.set(car.x, 0, car.z); carMesh.rotation.y = car.h;
+  const fx = Math.sin(car.h), fz = Math.cos(car.h);
+  let tx, ty, tz, lx, ly, lz;
+  if (inside) {
+    tx = car.x - fx * 0.4; ty = 1.6; tz = car.z - fz * 0.4;
+    lx = car.x + fx * 14; ly = 0.9; lz = car.z + fz * 14;
+  } else {
+    tx = car.x; ty = 70; tz = car.z - 30; lx = car.x; ly = 0; lz = car.z;
+  }
+  if (snapCam) { camera.position.set(tx, ty, tz); snapCam = false; }
+  const k = inside ? 1 : 0.12;
+  camera.position.x += (tx - camera.position.x) * k;
+  camera.position.y += (ty - camera.position.y) * k;
+  camera.position.z += (tz - camera.position.z) * k;
+  camera.up.set(0, 1, 0);
+  camera.lookAt(lx, ly, lz);
+  kmh.textContent = Math.round(Math.abs(car.v) * 3.6);
+  renderer.render(scene, camera);
 }
-
-(function loop() { update(); draw(); requestAnimationFrame(loop); })();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  step(dt); render(); requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 </script></body></html>
