@@ -7,15 +7,24 @@ body{margin:0;background:#232a24;color:#f2f4ef;font-family:system-ui,sans-serif;
 #stage{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 canvas{background:#5a9e4b;aspect-ratio:8/5;width:100%;max-width:100%;max-height:100%;object-fit:contain;border:4px solid #10140f;box-sizing:border-box}
 #info{font-size:13px;color:#aab4a8;text-align:center}
-#pad{display:none;gap:10px;justify-content:center;width:100%}
-#pad button{flex:1;max-width:96px;height:64px;font-size:26px;border:0;border-radius:12px;background:#3a443b;color:#f2f4ef;touch-action:none}
-#pad button:active{background:#6b7a6c}
-@media (pointer:coarse),(max-width:700px){#pad{display:flex}}
+#pad{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;max-width:560px}
+#wheel{width:120px;height:120px;border-radius:50%;border:14px solid #3a443b;box-sizing:border-box;position:relative;touch-action:none;flex:none;cursor:grab;background:#232a24}
+#wheel::before{content:"";position:absolute;left:50%;top:50%;width:18px;height:18px;border-radius:50%;background:#6b7a6c;transform:translate(-50%,-50%)}
+#wheel::after{content:"";position:absolute;left:0;right:0;top:50%;height:10px;margin-top:-5px;background:#3a443b}
+#wheel i{position:absolute;left:50%;top:-14px;width:10px;height:22px;margin-left:-5px;background:#d93a3a;border-radius:3px;z-index:1}
+#pedals{display:flex;gap:12px;align-items:flex-end}
+#pedals button{border:0;border-radius:12px;color:#f2f4ef;font-weight:700;font-size:15px;touch-action:none;user-select:none}
+#pedals [data-k=down]{width:64px;height:84px;background:#9b3a3a}
+#pedals [data-k=up]{width:80px;height:110px;background:#3d8a4a}
+#pedals button:active{filter:brightness(1.4)}
 </style></head><body>
 <div id="wrap">
 <div id="stage"><canvas id="c" width="800" height="500"></canvas></div>
-<div id="info">Panah / WASD: gas, rem, belok kiri-kanan. Spasi: rem tangan. Klik game dulu bila tombol tak merespons.</div>
-<div id="pad"><button data-k="left" aria-label="Kiri">◀</button><button data-k="up" aria-label="Gas">▲</button><button data-k="down" aria-label="Rem">▼</button><button data-k="right" aria-label="Kanan">▶</button></div>
+<div id="info">Panah / WASD: gas, rem, belok kiri-kanan. Spasi: rem tangan. Di layar: putar setir, tekan GAS / REM.</div>
+<div id="pad">
+<div id="wheel" aria-label="Setir"><i></i></div>
+<div id="pedals"><button data-k="down" aria-label="Rem">REM</button><button data-k="up" aria-label="Gas">GAS</button></div>
+</div>
 </div>
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
@@ -37,6 +46,20 @@ document.querySelectorAll('#pad button').forEach(b => {
   b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
   b.addEventListener('contextmenu', e => e.preventDefault());
 });
+
+// ---- setir ----
+const wheel = document.getElementById('wheel');
+let wheelAngle = 0, wheelDrag = null;
+const MAXW = 100;
+const ang = (e) => { const r = wheel.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height/2), e.clientX - (r.left + r.width/2)) * 180 / Math.PI; };
+wheel.addEventListener('pointerdown', e => { wheel.setPointerCapture(e.pointerId); wheelDrag = { last: ang(e) }; e.preventDefault(); });
+wheel.addEventListener('pointermove', e => {
+  if (!wheelDrag) return;
+  const a = ang(e); let d = a - wheelDrag.last; if (d > 180) d -= 360; if (d < -180) d += 360;
+  wheelDrag.last = a; wheelAngle = Math.max(-MAXW, Math.min(MAXW, wheelAngle + d));
+});
+const wheelUp = () => { wheelDrag = null; };
+wheel.addEventListener('pointerup', wheelUp); wheel.addEventListener('pointercancel', wheelUp);
 
 // ---- jalan aspal (lintasan oval) ----
 const road = document.createElement('canvas'); road.width = W; road.height = H;
@@ -67,7 +90,10 @@ function update() {
   car.v = Math.max(maxR, Math.min(maxV, car.v));
   if (Math.abs(car.v) < 0.02) car.v = 0;
 
-  const steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  if (!wheelDrag) wheelAngle *= 0.85; // setir kembali ke tengah
+  const keySteer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const steer = keySteer || wheelAngle / MAXW;
+  wheel.style.transform = 'rotate(' + (keySteer ? keySteer * 60 : wheelAngle) + 'deg)';
   // belok bisa dilakukan walau pelan; arah terbalik saat mundur
   const grip = Math.min(1, 0.35 + Math.abs(car.v) / 2);
   car.a += steer * 0.055 * grip * (car.v < 0 ? -1 : 1);
