@@ -261,7 +261,7 @@ function initAudio() {
   if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
   try {
     AC = new (window.AudioContext || window.webkitAudioContext)();
-    const master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination); AC.master = master;
+    const master = AC.createGain(); master.gain.value = 1.0; master.connect(AC.destination); AC.master = master;
     engFilter = AC.createBiquadFilter(); engFilter.type = 'lowpass'; engFilter.frequency.value = 600;
     engGain = AC.createGain(); engGain.gain.value = 0;
     eng1 = AC.createOscillator(); eng1.type = 'sawtooth';
@@ -278,33 +278,37 @@ function initAudio() {
     ns.connect(bp); bp.connect(noiseGain); noiseGain.connect(master); ns.start();
   } catch (e) { AC = null; }
 }
+const SILENT = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+let silentEl = null;
 function unlockAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+  try { if (!silentEl) { silentEl = new Audio(SILENT); silentEl.loop = true; silentEl.play().catch(() => {}); } } catch (e) {}
   initAudio();
   if (AC && AC.state !== 'running') AC.resume().then(() => { if (AC.state === 'running') ping(); }).catch(() => {});
 }
 function ping() { // bunyi pendek tanda suara aktif
   if (!AC || muted) return;
-  const o = AC.createOscillator(), g = AC.createGain(); o.frequency.value = 660;
-  g.gain.setValueAtTime(0.15, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.15);
-  o.connect(g); g.connect(AC.master); o.start(); o.stop(AC.currentTime + 0.16);
+  const o = AC.createOscillator(), g = AC.createGain(); o.frequency.value = 880;
+  g.gain.setValueAtTime(0.5, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.3);
+  o.connect(g); g.connect(AC.master); o.start(); o.stop(AC.currentTime + 0.32);
 }
 // browser baru mengizinkan suara setelah sentuhan selesai / klik / tombol: pasang semuanya
 ['pointerdown', 'pointerup', 'touchend', 'mousedown', 'click', 'keydown'].forEach(ev => addEventListener(ev, unlockAudio, true));
 function thump() {
   if (!AC || muted) return;
   const src = AC.createBufferSource(); src.buffer = thumpBuf;
-  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400;
-  const g = AC.createGain(); g.gain.setValueAtTime(0.7, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.25);
+  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900;
+  const g = AC.createGain(); g.gain.setValueAtTime(1.2, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.25);
   src.connect(lp); lp.connect(g); g.connect(AC.master); src.start(); src.stop(AC.currentTime + 0.3);
 }
 function audioUpdate(throttle, braking, speed) {
   if (!AC) return;
   const t = AC.currentTime, sp = Math.abs(speed);
-  const f = 38 + sp * 6.5 + (throttle ? 14 : 0);
-  eng1.frequency.setTargetAtTime(f, t, 0.08); eng2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
-  engFilter.frequency.setTargetAtTime(350 + sp * 55 + (throttle ? 500 : 0), t, 0.1);
-  engGain.gain.setTargetAtTime(muted ? 0 : 0.07 + (throttle ? 0.07 : 0) + Math.min(0.05, sp * 0.003), t, 0.08);
-  noiseGain.gain.setTargetAtTime(muted ? 0 : (braking && sp > 4 ? Math.min(0.16, 0.03 + sp * 0.007) : 0), t, 0.04);
+  const f = 85 + sp * 9 + (throttle ? 25 : 0);
+  eng1.frequency.setTargetAtTime(f, t, 0.08); eng2.frequency.setTargetAtTime(f * 1.5, t, 0.08);
+  engFilter.frequency.setTargetAtTime(900 + sp * 90 + (throttle ? 900 : 0), t, 0.1);
+  engGain.gain.setTargetAtTime(muted ? 0 : 0.14 + (throttle ? 0.14 : 0) + Math.min(0.1, sp * 0.006), t, 0.08);
+  noiseGain.gain.setTargetAtTime(muted ? 0 : (braking && sp > 4 ? Math.min(0.5, 0.12 + sp * 0.02) : 0), t, 0.04);
 }
 const muteBtn = document.getElementById('mute');
 function muteLabel() { muteBtn.textContent = 'Suara: ' + (muted ? 'MATI' : (AC && AC.state === 'running' ? 'HIDUP' : 'KETUK')); }
