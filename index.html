@@ -116,11 +116,17 @@ let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 214748364
 function tree(x, z) {
   const g = new THREE.Group();
   const h = 2 + rnd() * 1.5;
+  const greens = [0x2f7d3a, 0x3b9447, 0x2a6e35, 0x4aa04f], gi = Math.floor(rnd() * 4);
   const t = box(0.9, h, 0.9, 0x6b4a2b); t.position.y = h / 2; g.add(t);
-  const s1 = 3.4 + rnd(), l1 = box(s1, 2.2, s1, 0x2f7d3a); l1.position.y = h + 0.9; g.add(l1);
-  const s2 = s1 * 0.65, l2 = box(s2, 1.8, s2, 0x3b9447); l2.position.y = h + 2.5; g.add(l2);
+  const sc = 0.75 + rnd() * 0.7, s1 = (3 + rnd()) * sc, l1 = box(s1, 2.2 * sc, s1, greens[gi]); l1.position.y = h + 0.9; g.add(l1);
+  const s2 = s1 * 0.65, l2 = box(s2, 1.8 * sc, s2, greens[(gi + 1) % 4]); l2.position.y = h + 2.3 * sc; g.add(l2);
   g.position.set(x, 0, z); g.rotation.y = rnd() * Math.PI; scene.add(g);
   colliders.push({ x, z, r: 1.6 });
+}
+function bush(x, z) {
+  const k = 0.8 + rnd() * 0.9, b = box(k * 1.4, k, k * 1.4, rnd() < 0.5 ? 0x3f8f3f : 0x4fa34a);
+  b.position.set(x, k / 2, z); b.rotation.y = rnd() * Math.PI; scene.add(b);
+  colliders.push({ x, z, r: k * 0.7 });
 }
 const houseColors = [0xe8d9b5, 0xd96c5a, 0x7fb0d6, 0xf0c44a, 0xb9d6a0, 0xe0a0c0];
 function house(x, z) {
@@ -143,19 +149,52 @@ function spot(minSdf, maxSdf, minGap, xr, zr) {
   }
   return null;
 }
-for (let i = 0; i < 12; i++) { const p = spot(16, 70, 6, 150, 120); if (p) house(p[0], p[1]); }   // di luar lintasan
-for (let i = 0; i < 3; i++) { const p = spot(-60, -16, 6, 50, 28); if (p) house(p[0], p[1]); }    // di tengah lintasan
-for (let i = 0; i < 90; i++) { const p = spot(11, 90, 2.5, 160, 130); if (p) tree(p[0], p[1]); }
-for (let i = 0; i < 14; i++) { const p = spot(-60, -11, 2.5, 50, 28); if (p) tree(p[0], p[1]); }
+for (let i = 0; i < 26; i++) { const p = spot(16, 90, 3, 170, 140); if (p) house(p[0], p[1]); }   // di luar lintasan
+for (let i = 0; i < 4; i++) { const p = spot(-60, -16, 4, 50, 28); if (p) house(p[0], p[1]); }    // di tengah lintasan
+for (let i = 0; i < 300; i++) { const p = spot(11, 140, 1.6, 190, 160); if (p) tree(p[0], p[1]); }
+for (let i = 0; i < 120; i++) { const p = spot(10, 140, 0.8, 190, 160); if (p) bush(p[0], p[1]); }
+for (let i = 0; i < 40; i++) { const p = spot(-60, -11, 1.6, 50, 28); if (p) tree(p[0], p[1]); }
+for (let i = 0; i < 20; i++) { const p = spot(-60, -10, 0.8, 50, 28); if (p) bush(p[0], p[1]); }
 
-// ---- mobil ----
+// ---- mobil (bodi melengkung: kap, spakbor, bundar di moncong) ----
 const carMesh = new THREE.Group();
-const body = box(2, 0.55, 4.2, 0xd93a3a); body.position.y = 0.6; carMesh.add(body);
-const cabin = box(1.8, 0.65, 2, 0xb02e2e); cabin.position.set(0, 1.3, -0.3); carMesh.add(cabin);
-const glass = box(1.82, 0.4, 1.6, 0x9fd8ff); glass.position.set(0, 1.35, -0.3); carMesh.add(glass);
-for (const [x, z] of [[-1.05, 1.3], [1.05, 1.3], [-1.05, -1.3], [1.05, -1.3]]) { const w = box(0.3, 0.7, 0.7, 0x151515); w.position.set(x, 0.35, z); carMesh.add(w); }
-for (const x of [-0.7, 0.7]) { const l = box(0.4, 0.2, 0.1, 0xffe14d); l.position.set(x, 0.75, 2.12); carMesh.add(l); }
+const paint = new THREE.MeshLambertMaterial({ color: 0xd93a3a, side: THREE.DoubleSide });
+function makeHood(len, width) {
+  const g = new THREE.PlaneGeometry(1, 1, 24, 24), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const u = p.getX(i) * 2, v = p.getY(i) + 0.5;               // u: -1..1 lebar, v: 0..1 panjang
+    const nose = Math.max(0, (v - 0.72) / 0.28);
+    const hw = (width / 2) * (1 - 0.12 * v * v) * Math.sqrt(Math.max(0.02, 1 - Math.pow(nose, 2.4) * 0.6));
+    const y = 0.86 - 0.34 * Math.pow(v, 2.2) - 0.2 * Math.pow(Math.abs(u), 3) * (1 - 0.3 * v) + 0.09 * (1 - u * u) * (1 - 0.6 * v);
+    p.setXYZ(i, u * hw, y, v * len);
+  }
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, paint);
+}
+const hood = makeHood(1.9, 1.95); hood.position.z = 0.25; carMesh.add(hood);
+const nose = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), paint); // moncong bawah
+nose.scale.set(1.9, 0.9, 0.9); nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.62, 2.0); // dilihat dari luar saja
+carMesh.add(nose);
+const body = new THREE.Mesh(new THREE.BoxGeometry(2, 0.55, 2.6), paint); body.position.set(0, 0.6, -0.95); carMesh.add(body);
+for (const sx of [-1, 1]) {                                     // spakbor menonjol di kiri-kanan kap
+  const f = new THREE.Mesh(new THREE.SphereGeometry(0.6, 14, 10), paint);
+  f.scale.set(0.38, 0.32, 1.15); f.position.set(sx * 0.93, 0.86, 1.2); carMesh.add(f);
+}
+const cabin = box(1.8, 0.65, 2, 0xb02e2e); cabin.position.set(0, 1.25, -0.8); carMesh.add(cabin);
+const glass = box(1.82, 0.4, 1.6, 0x9fd8ff); glass.position.set(0, 1.3, -0.8); carMesh.add(glass);
+const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.34, 14); wheelGeo.rotateZ(Math.PI / 2);
+for (const [x, z] of [[-1.02, 1.3], [1.02, 1.3], [-1.02, -1.5], [1.02, -1.5]]) { const w = new THREE.Mesh(wheelGeo, mat(0x151515)); w.position.set(x, 0.42, z); carMesh.add(w); }
+const headGeo = new THREE.SphereGeometry(0.17, 10, 8);
+for (const x of [-0.62, 0.62]) { const l = new THREE.Mesh(headGeo, mat(0xffe97a)); l.scale.z = 0.6; l.position.set(x, 0.66, 2.0); carMesh.add(l); }
+const grill = box(0.8, 0.14, 0.08, 0x1a1a1a); grill.position.set(0, 0.55, 2.1); carMesh.add(grill);
 scene.add(carMesh);
+scene.add(camera);
+// bagian kabin yang tampak dari dalam: tiang kaca depan, atap, kaca spion
+const cockpit = new THREE.Group(); cockpit.visible = false; camera.add(cockpit);
+const dark = mat(0x16181b);
+for (const sx of [-1, 1]) { const pil = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.1, 0.1), dark); pil.position.set(sx * 0.95, 0.1, -1.0); pil.rotation.z = -sx * 0.35; cockpit.add(pil); }
+const header = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.05, 0.3), dark); header.position.set(0, 0.8, -0.9); cockpit.add(header);
+const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.05), dark); mirror.position.set(0, 0.62, -0.95); cockpit.add(mirror);
 
 const car = { x: 0, z: -B, h: Math.PI / 2, v: 0 };
 
@@ -201,7 +240,8 @@ function toggleCam() {
   document.body.classList.toggle('inside', inside);
   camBtn.textContent = 'Kamera: ' + (inside ? 'DALAM' : 'ATAS');
   camera.fov = inside ? 72 : 55; camera.updateProjectionMatrix();
-  carMesh.children.forEach(c => { if (c === cabin || c === glass) c.visible = !inside; });
+  carMesh.children.forEach(c => { if (c === cabin || c === glass || c === nose) c.visible = !inside; });
+  cockpit.visible = inside;
   snapCam = true;
 }
 camBtn.addEventListener('click', toggleCam);
@@ -246,7 +286,7 @@ function render() {
   const fx = Math.sin(car.h), fz = Math.cos(car.h);
   let tx, ty, tz, lx, ly, lz;
   if (inside) {
-    tx = car.x - fx * 0.4; ty = 1.6; tz = car.z - fz * 0.4;
+    tx = car.x - fx * 0.5; ty = 1.55; tz = car.z - fz * 0.5;
     lx = car.x + fx * 14; ly = 0.9; lz = car.z + fz * 14;
   } else {
     tx = car.x; ty = 70; tz = car.z - 30; lx = car.x; ly = 0; lz = car.z;
