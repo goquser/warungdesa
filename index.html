@@ -1,97 +1,107 @@
 <!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-<title>Mobil Kotak</title>
-<style>
-  html, body { margin: 0; height: 100%; background: #2b2b2b; color: #fff; font-family: sans-serif; overflow: hidden; touch-action: none; }
-  #wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
-  canvas { background: #5a9e4b; max-width: 100vw; max-height: 85vh; border: 4px solid #111; }
-  #info { margin: 8px; font-size: 14px; opacity: .85; text-align: center; }
-  #pad { display: none; gap: 10px; margin-top: 6px; }
-  #pad button { width: 70px; height: 56px; font-size: 24px; border: 0; border-radius: 10px; background: #444; color: #fff; }
-  #pad button:active { background: #888; }
-  @media (pointer: coarse) { #pad { display: flex; } }
-</style>
-</head>
-<body>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Mobil Kotak</title>
+<style>html,body{height:100%}
+body{margin:0;background:#232a24;color:#f2f4ef;font-family:system-ui,sans-serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+ padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));box-sizing:border-box}
+#wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:8px;min-height:0}
+#stage{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
+canvas{background:#5a9e4b;aspect-ratio:8/5;width:100%;max-width:100%;max-height:100%;object-fit:contain;border:4px solid #10140f;box-sizing:border-box}
+#info{font-size:13px;color:#aab4a8;text-align:center}
+#pad{display:none;gap:10px;justify-content:center;width:100%}
+#pad button{flex:1;max-width:96px;height:64px;font-size:26px;border:0;border-radius:12px;background:#3a443b;color:#f2f4ef;touch-action:none}
+#pad button:active{background:#6b7a6c}
+@media (pointer:coarse),(max-width:700px){#pad{display:flex}}
+</style></head><body>
 <div id="wrap">
-  <canvas id="c" width="800" height="500"></canvas>
-  <div id="info">Panah / WASD: gas, rem, belok. Spasi: rem tangan.</div>
-  <div id="pad">
-    <button data-k="left">◀</button>
-    <button data-k="up">▲</button>
-    <button data-k="down">▼</button>
-    <button data-k="right">▶</button>
-  </div>
+<div id="stage"><canvas id="c" width="800" height="500"></canvas></div>
+<div id="info">Panah / WASD: gas, rem, belok kiri-kanan. Spasi: rem tangan. Klik game dulu bila tombol tak merespons.</div>
+<div id="pad"><button data-k="left" aria-label="Kiri">◀</button><button data-k="up" aria-label="Gas">▲</button><button data-k="down" aria-label="Rem">▼</button><button data-k="right" aria-label="Kanan">▶</button></div>
 </div>
 <script>
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const W = cv.width, H = cv.height;
 
+// ---- input ----
 const keys = {};
-const map = { ArrowUp:'up', w:'up', ArrowDown:'down', s:'down', ArrowLeft:'left', a:'left', ArrowRight:'right', d:'right', ' ':'brake' };
-addEventListener('keydown', e => { const k = map[e.key]; if (k) { keys[k] = true; e.preventDefault(); } });
-addEventListener('keyup', e => { const k = map[e.key]; if (k) keys[k] = false; });
+const map = { ArrowUp:'up', KeyW:'up', ArrowDown:'down', KeyS:'down', ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right', Space:'brake' };
+addEventListener('keydown', e => { const k = map[e.code]; if (k) { keys[k] = true; e.preventDefault(); } });
+addEventListener('keyup', e => { const k = map[e.code]; if (k) { keys[k] = false; e.preventDefault(); } });
+addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+// iframe perlu fokus agar keyboard terbaca
+addEventListener('pointerdown', () => window.focus());
+window.focus();
 document.querySelectorAll('#pad button').forEach(b => {
   const k = b.dataset.k;
-  const on = e => { keys[k] = true; e.preventDefault(); };
+  b.addEventListener('pointerdown', e => { keys[k] = true; b.setPointerCapture(e.pointerId); e.preventDefault(); });
   const off = e => { keys[k] = false; e.preventDefault(); };
-  b.addEventListener('touchstart', on); b.addEventListener('touchend', off); b.addEventListener('touchcancel', off);
-  b.addEventListener('mousedown', on); b.addEventListener('mouseup', off); b.addEventListener('mouseleave', off);
+  b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+  b.addEventListener('contextmenu', e => e.preventDefault());
 });
 
-const car = { x: W/2, y: H/2, a: -Math.PI/2, v: 0, w: 22, l: 40 };
+// ---- jalan aspal (lintasan oval) ----
+const road = document.createElement('canvas'); road.width = W; road.height = H;
+const rc = road.getContext('2d');
+function trackPath(c) {
+  c.beginPath();
+  c.roundRect(110, 90, W - 220, H - 180, 120);
+}
+rc.lineJoin = 'round';
+trackPath(rc); rc.lineWidth = 96; rc.strokeStyle = '#3d4044'; rc.stroke();
+const roadData = rc.getImageData(0, 0, W, H).data;
+const onRoad = (x, y) => {
+  x = Math.round(x); y = Math.round(y);
+  if (x < 0 || y < 0 || x >= W || y >= H) return false;
+  return roadData[(y * W + x) * 4 + 3] > 0;
+};
 
-// rintangan kotak
-const blocks = [
-  [150,100,80,80],[560,80,100,60],[330,220,60,140],[600,320,110,70],[100,330,90,90],[450,400,120,50]
-];
+const car = { x: W / 2, y: 90, a: 0, v: 0, w: 22, l: 40 };
 const trail = [];
 
 function update() {
-  const accel = 0.18, maxV = 5, maxR = -2;
+  const road_ = onRoad(car.x, car.y);
+  const maxV = road_ ? 5 : 2.2, maxR = -2, accel = 0.16;
   if (keys.up) car.v += accel;
   if (keys.down) car.v -= accel;
   if (keys.brake) car.v *= 0.9;
-  car.v *= 0.985;
+  car.v *= road_ ? 0.99 : 0.96;
   car.v = Math.max(maxR, Math.min(maxV, car.v));
   if (Math.abs(car.v) < 0.02) car.v = 0;
 
   const steer = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-  car.a += steer * 0.05 * Math.min(1, Math.abs(car.v) / 2) * Math.sign(car.v || 1);
+  // belok bisa dilakukan walau pelan; arah terbalik saat mundur
+  const grip = Math.min(1, 0.35 + Math.abs(car.v) / 2);
+  car.a += steer * 0.055 * grip * (car.v < 0 ? -1 : 1);
 
   const nx = car.x + Math.cos(car.a) * car.v;
   const ny = car.y + Math.sin(car.a) * car.v;
   const r = 14;
-  let hit = nx < r || nx > W - r || ny < r || ny > H - r;
-  for (const [bx,by,bw,bh] of blocks)
-    if (nx > bx - r && nx < bx + bw + r && ny > by - r && ny < by + bh + r) hit = true;
-  if (hit) car.v *= -0.4;
+  if (nx < r || nx > W - r || ny < r || ny > H - r) car.v *= -0.4;
   else { car.x = nx; car.y = ny; }
 
-  if (Math.abs(car.v) > 2 && (!trail.length || Math.hypot(trail.at(-1)[0]-car.x, trail.at(-1)[1]-car.y) > 6)) {
-    trail.push([car.x, car.y]); if (trail.length > 120) trail.shift();
+  if (Math.abs(car.v) > 2 && (!trail.length || Math.hypot(trail.at(-1)[0] - car.x, trail.at(-1)[1] - car.y) > 6)) {
+    trail.push([car.x, car.y, road_]); if (trail.length > 100) trail.shift();
   }
 }
 
 function draw() {
-  ctx.fillStyle = '#5a9e4b'; ctx.fillRect(0,0,W,H);
-  ctx.fillStyle = 'rgba(60,40,20,.25)';
-  for (const [x,y] of trail) ctx.fillRect(x-3, y-3, 6, 6);
-  ctx.fillStyle = '#7a5a3a';
-  for (const [x,y,w,h] of blocks) ctx.fillRect(x,y,w,h);
+  ctx.fillStyle = '#5a9e4b'; ctx.fillRect(0, 0, W, H);
+  // aspal + marka
+  ctx.drawImage(road, 0, 0);
+  ctx.save();
+  trackPath(ctx); ctx.lineWidth = 3; ctx.strokeStyle = '#e8e8e0'; ctx.setLineDash([22, 18]); ctx.stroke();
+  ctx.restore();
+  // garis start
+  ctx.fillStyle = '#fff'; ctx.fillRect(W / 2 - 3, 42, 6, 96);
+
+  for (const [x, y, onr] of trail) { ctx.fillStyle = onr ? 'rgba(0,0,0,.25)' : 'rgba(60,40,20,.3)'; ctx.fillRect(x - 3, y - 3, 6, 6); }
 
   ctx.save();
   ctx.translate(car.x, car.y); ctx.rotate(car.a);
-  ctx.fillStyle = '#d93a3a'; ctx.fillRect(-car.l/2, -car.w/2, car.l, car.w);
-  ctx.fillStyle = '#9fd8ff'; ctx.fillRect(2, -car.w/2+3, 10, car.w-6);
-  ctx.fillStyle = '#ffe14d'; ctx.fillRect(car.l/2-4, -car.w/2+2, 4, 5); ctx.fillRect(car.l/2-4, car.w/2-7, 4, 5);
+  ctx.fillStyle = '#d93a3a'; ctx.fillRect(-car.l / 2, -car.w / 2, car.l, car.w);
+  ctx.fillStyle = '#9fd8ff'; ctx.fillRect(2, -car.w / 2 + 3, 10, car.w - 6);
+  ctx.fillStyle = '#ffe14d'; ctx.fillRect(car.l / 2 - 4, -car.w / 2 + 2, 4, 5); ctx.fillRect(car.l / 2 - 4, car.w / 2 - 7, 4, 5);
   ctx.restore();
 }
 
 (function loop() { update(); draw(); requestAnimationFrame(loop); })();
-</script>
-</body>
-</html>
+</script></body></html>
