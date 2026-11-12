@@ -7,8 +7,9 @@ body{margin:0;background:#9fd0ee;color:#f2f4ef;font-family:system-ui,sans-serif;
  padding-top:max(10px,env(safe-area-inset-top,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));pointer-events:none}
 #speed{background:rgba(16,20,15,.72);padding:8px 12px;border-radius:10px;font-weight:700;font-size:20px;font-variant-numeric:tabular-nums;min-width:96px}
 #speed small{font-size:12px;font-weight:500;opacity:.8;margin-left:4px}
-#cam{pointer-events:auto;border:0;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:700;background:rgba(16,20,15,.72);color:#f2f4ef;touch-action:manipulation}
-#cam:focus-visible{outline:2px solid #fff}
+#hud .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+#cam,#mute{pointer-events:auto;border:0;border-radius:10px;padding:10px 14px;font-size:14px;font-weight:700;background:rgba(16,20,15,.72);color:#f2f4ef;touch-action:manipulation}
+#cam:focus-visible,#mute:focus-visible{outline:2px solid #fff}
 #help{position:fixed;left:0;right:0;top:60px;text-align:center;font-size:12px;color:#10140f;opacity:.75;padding:0 16px;pointer-events:none}
 #dash{position:fixed;left:0;right:0;bottom:0;height:26vh;min-height:150px;background:linear-gradient(#0000,#101214 40%);display:none;pointer-events:none}
 .inside #dash{display:block}
@@ -24,7 +25,7 @@ body{margin:0;background:#9fd0ee;color:#f2f4ef;font-family:system-ui,sans-serif;
 #pedals button:active{filter:brightness(1.4)}
 </style></head><body>
 <canvas id="view"></canvas>
-<div id="hud"><div id="speed"><span id="kmh">0</span><small>km/j</small></div><button id="cam" type="button">Kamera: ATAS</button></div>
+<div id="hud"><div id="speed"><span id="kmh">0</span><small>km/j</small></div><div class="btns"><button id="cam" type="button">Kamera: ATAS</button><button id="mute" type="button">Suara: HIDUP</button></div></div>
 <div id="help">Panah/WASD: gas, rem, belok · Spasi: rem · C: ganti kamera</div>
 <div id="dash"></div>
 <div id="pad">
@@ -253,10 +254,56 @@ function resize() {
 }
 addEventListener('resize', resize); resize();
 
+
+// ---- suara (WebAudio, mulai setelah sentuhan/tombol pertama) ----
+let AC = null, eng1, eng2, engGain, engFilter, noiseGain, thumpBuf, muted = false;
+function initAudio() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    const master = AC.createGain(); master.gain.value = 0.5; master.connect(AC.destination); AC.master = master;
+    engFilter = AC.createBiquadFilter(); engFilter.type = 'lowpass'; engFilter.frequency.value = 600;
+    engGain = AC.createGain(); engGain.gain.value = 0;
+    eng1 = AC.createOscillator(); eng1.type = 'sawtooth';
+    eng2 = AC.createOscillator(); eng2.type = 'square';
+    eng1.connect(engFilter); eng2.connect(engFilter); engFilter.connect(engGain); engGain.connect(master);
+    eng1.start(); eng2.start();
+    // derau untuk decit rem dan tabrakan
+    const len = AC.sampleRate, nb = AC.createBuffer(1, len, AC.sampleRate), d = nb.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    thumpBuf = nb;
+    const ns = AC.createBufferSource(); ns.buffer = nb; ns.loop = true;
+    const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 6;
+    noiseGain = AC.createGain(); noiseGain.gain.value = 0;
+    ns.connect(bp); bp.connect(noiseGain); noiseGain.connect(master); ns.start();
+  } catch (e) { AC = null; }
+}
+['pointerdown', 'keydown'].forEach(ev => addEventListener(ev, initAudio));
+function thump() {
+  if (!AC || muted) return;
+  const src = AC.createBufferSource(); src.buffer = thumpBuf;
+  const lp = AC.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400;
+  const g = AC.createGain(); g.gain.setValueAtTime(0.7, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.25);
+  src.connect(lp); lp.connect(g); g.connect(AC.master); src.start(); src.stop(AC.currentTime + 0.3);
+}
+function audioUpdate(throttle, braking, speed) {
+  if (!AC) return;
+  const t = AC.currentTime, sp = Math.abs(speed);
+  const f = 38 + sp * 6.5 + (throttle ? 14 : 0);
+  eng1.frequency.setTargetAtTime(f, t, 0.08); eng2.frequency.setTargetAtTime(f * 0.5, t, 0.08);
+  engFilter.frequency.setTargetAtTime(350 + sp * 55 + (throttle ? 500 : 0), t, 0.1);
+  engGain.gain.setTargetAtTime(muted ? 0 : 0.07 + (throttle ? 0.07 : 0) + Math.min(0.05, sp * 0.003), t, 0.08);
+  noiseGain.gain.setTargetAtTime(muted ? 0 : (braking && sp > 4 ? Math.min(0.16, 0.03 + sp * 0.007) : 0), t, 0.04);
+}
+const muteBtn = document.getElementById('mute');
+muteBtn.addEventListener('click', () => { muted = !muted; muteBtn.textContent = 'Suara: ' + (muted ? 'MATI' : 'HIDUP'); });
+
 // ---- loop ----
 const kmh = document.getElementById('kmh');
 let last = performance.now();
+let hitCool = 0;
 function step(dt) {
+  if (hitCool > 0) hitCool--;
   const road = onRoad(car.x, car.z);
   const maxV = road ? 20 : 7, maxR = -6;
   if (keys.up) car.v += 11 * dt;
@@ -278,7 +325,7 @@ function step(dt) {
   car.x = Math.max(-280, Math.min(280, car.x)); car.z = Math.max(-280, Math.min(280, car.z));
   for (const c of colliders) {
     const dx = car.x - c.x, dz = car.z - c.z, d = Math.hypot(dx, dz), m = c.r + 1.5;
-    if (d < m && d > 0) { car.x = c.x + dx / d * m; car.z = c.z + dz / d * m; car.v *= 0.5; }
+    if (d < m && d > 0) { car.x = c.x + dx / d * m; car.z = c.z + dz / d * m; car.v *= 0.5; if (!hitCool) { thump(); hitCool = 12; } }
   }
 }
 function render() {
@@ -298,6 +345,7 @@ function render() {
   camera.position.z += (tz - camera.position.z) * k;
   camera.up.set(0, 1, 0);
   camera.lookAt(lx, ly, lz);
+  audioUpdate(keys.up, (keys.down && car.v > 0.5) || (keys.brake && Math.abs(car.v) > 1), car.v);
   kmh.textContent = Math.round(Math.abs(car.v) * 3.6);
   renderer.render(scene, camera);
 }
